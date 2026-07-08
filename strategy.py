@@ -27,8 +27,8 @@ def calculating_signal(open_price, high, low, close, reward_risk):
     
     # Вычисляем количество свечей в дне и задаем периоды для MA
     candles_per_day = 24 * 60 // 15  # 96
-    ma20_period = 5 * candles_per_day  # 1920
-    ma40_period = 10 * candles_per_day  # 3840
+    ma20_period = 1 * candles_per_day 
+    ma40_period = 5 * candles_per_day  
 
     # Проверяем, что данных достаточно для расчёта
     if len(close) < ma40_period:
