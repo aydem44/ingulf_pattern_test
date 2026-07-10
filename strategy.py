@@ -2,7 +2,7 @@ import pandas as pd
 from datetime import datetime
 import numpy as np
 
-def calculating_signal(open_price, high, low, close, reward_risk):
+def calculating_signal(open_price, high, low, close, reward_risk, ma_fast, ma_slow):
     """
     Генерирует торговые сигналы на основе паттерна "поглощение".
 
@@ -27,17 +27,17 @@ def calculating_signal(open_price, high, low, close, reward_risk):
     
     # Вычисляем количество свечей в дне и задаем периоды для MA
     candles_per_day = 24 * 60 // 15  # 96
-    ma20_period = 1 * candles_per_day 
-    ma40_period = 5 * candles_per_day  
+    ma20_fast = ma_fast * candles_per_day 
+    ma40_slow = ma_slow * candles_per_day  
 
     # Проверяем, что данных достаточно для расчёта
-    if len(close) < ma40_period:
+    if len(close) < ma40_slow:
         return entry_flag, stop_loss, take_profit
 
-    for candle in range(1+ma40_period, n-1):
+    for candle in range(1+ma40_slow, n-1):
         # Расчёт MA прямо на данных 15-минутного таймфрейма
-        ma20 = close.iloc[0:candle].rolling(ma20_period).mean().iloc[-1]
-        ma40 = close.iloc[0:candle].rolling(ma40_period).mean().iloc[-1]
+        ma20 = close.iloc[0:candle].rolling(ma20_fast).mean().iloc[-1]
+        ma40 = close.iloc[0:candle].rolling(ma40_slow).mean().iloc[-1]
         is_uptrend.iloc[candle] = ma20 > ma40
         trend_factor=is_uptrend.iloc[candle]
     
@@ -50,13 +50,27 @@ def calculating_signal(open_price, high, low, close, reward_risk):
         if prev_bearish_candle and curr_close>prev_open and trend_factor:
             entry_flag.iloc[candle]=1
             risk=curr_close - curr_open
-            stop_loss.iloc[candle]=curr_open
-            take_profit.iloc[candle] = curr_close + risk*reward_risk
+            # stop_loss.iloc[candle]=curr_open
+            # take_profit.iloc[candle] = curr_close + risk*reward_risk
+            if risk>0:
+                stop_loss.iloc[candle]=risk/curr_open
+                take_profit.iloc[candle] = risk*reward_risk/curr_close
+            else:
+                min_risk = curr_close * 0.01
+                stop_loss.iloc[candle] = min_risk / curr_open
+                take_profit.iloc[candle] = min_risk * reward_risk / curr_close
+                print(f"⚠️ Использован минимальный риск на свече {candle}: risk={risk} -> min_risk={min_risk}")
         elif prev_bullish_candle and curr_close<prev_open and not trend_factor:
             entry_flag.iloc[candle]=-1
             risk=curr_open-curr_close
-            stop_loss.iloc[candle]=curr_open
-            take_profit.iloc[candle] = curr_close - risk*reward_risk
+            # stop_loss.iloc[candle]=curr_open
+            # take_profit.iloc[candle] = curr_close - risk*reward_risk
+            if risk>0:
+                stop_loss.iloc[candle]=risk/curr_open
+                take_profit.iloc[candle] = risk*reward_risk/curr_close
+            else:
+                stop_loss.iloc[candle]=0.01
+                take_profit.iloc[candle] = 0.01
         else:
             entry_flag.iloc[candle]=0
             stop_loss.iloc[candle]=None

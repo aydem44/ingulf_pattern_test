@@ -13,6 +13,7 @@ import os
 from dotenv import load_dotenv
 from strategy import calculating_signal
 from pybit.unified_trading import HTTP
+from config import MA_SETS, RISK_REWARD
 
 # Решаем проблему связки европейского сервера с сервисами предоставления данных
 load_dotenv()
@@ -25,7 +26,7 @@ os.environ['HTTP'] = proxy_url
 os.environ['HTTPS'] = proxy_url
 
 
-# In[ ]:
+# In[2]:
 
 
 end_date = datetime.datetime.now()
@@ -70,7 +71,7 @@ def multifetch_data_15m(symbol, days, interval):
         chunk_size=10
         while days_shifting>0:
             print(f"Осталось загрузить:{days_shifting} дней")
-            sleep(1)
+            sleep(3)
             klines=session.get_kline(
                 category='linear',
                 symbol=symbol,
@@ -92,7 +93,7 @@ def multifetch_data_15m(symbol, days, interval):
 btc_price = multifetch_data_15m('BTCUSDT', 1000, interval='15')
 
 
-# In[ ]:
+# In[3]:
 
 
 open_price = btc_price['Open']
@@ -102,15 +103,16 @@ close = btc_price['Close']
 
 EngulfingIndicator = vbt.IndicatorFactory(
     input_names = ['open_price', 'high', 'low', 'close'],
-    param_names = ['reward_risk'],
+    param_names = ['reward_risk', 'ma_fast', 'ma_slow'],
     output_names = ['entry_flag', 'stop_loss','take_profit']
 ).from_apply_func(calculating_signal,
-                  reward_risk = 1,
+                  reward_risk = 2,
+                  ma_fast=10, ma_slow=20,
                   keep_pd=True
 )
 
 res = EngulfingIndicator.run(open_price, high, low, close,
-    reward_risk=1)
+    reward_risk=2, ma_fast=10, ma_slow=20)
 
 pf = vbt.Portfolio.from_signals(
     close,
@@ -119,14 +121,45 @@ pf = vbt.Portfolio.from_signals(
     short_entries = res.entry_flag==-1,
     short_exits=None,
     init_cash = 10000,
-    size=0.1,
+    size=0.5,
     sl_stop = res.stop_loss,
     tp_stop = res.take_profit,
-    freq='1h'
+    freq='15m'
 )
 
 print(pf.stats())
 pf.plot().show()
+
+
+# In[4]:
+
+
+rr_array = RISK_REWARD
+ma_array = MA_SETS
+params=[]
+
+for rr in RISK_REWARD:
+    for maf, mas in ma_array:
+        res = EngulfingIndicator.run(open_price, high, low, close,
+            reward_risk=rr, ma_fast=maf, ma_slow=mas)
+        pf = vbt.Portfolio.from_signals(
+            close,
+            entries = res.entry_flag==1,
+            exits=None,
+            short_entries = res.entry_flag==-1,
+            short_exits=None,
+            init_cash = 10000,
+            size=0.1,
+            sl_stop = res.stop_loss,
+            tp_stop = res.take_profit,
+            freq='1h'
+        )
+        params.append((rr, (maf, mas), pf.total_return()))
+
+best = max(params, key = lambda x: x[2])
+print(f"Наилучшая доходность: {best[2]} приследующих параметрах.")
+print(f"Reward/Risk = {best[0]}")
+print(f"Fast MA = {best[1][0]}. Slow MA = {best[1][1]}")
 
 
 # In[ ]:
